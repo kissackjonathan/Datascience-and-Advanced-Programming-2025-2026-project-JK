@@ -19,10 +19,10 @@ Expected Challenges and How I’ll Address Them
 * Model choice and interpretability: Choosing the right machine learning model is crucial, ill have to do some more research on the different machine learning models.
 
 Success Criteria
-* Machine learning accuracy >80% (if classification into stable vs unstable).
+* Machine learning accuracy >-70-80% (i am not sure yet) (if classification into stable vs unstable).
 * Clear visualisations and feature‐importance plots demonstrating which variables drive instability.
 * A reproducible codebase with documentation and notebooks that support the project’s findings.
 
-Stretch Goals (if time permits)
-* Develop an interactive dashboard (Streamlit) where users explore predicted stability by country and scenario.
-* Extend the model to predict future probability of instability (e.g., for 2026-2030) using Monte Carlo scenario simulations.
+Stretch Goals 
+* Develop an interactive dashboard (Streamlit) where users explore predicted stability by country and scenario. ( probably unrealisable)
+* Extend the model to predict future probability of instability (e.g., for 2026-2030) using Monte Carlo scenario simulations.( better for my goals and could happen if time permits)
