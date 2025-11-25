@@ -11,15 +11,15 @@ Planned Approach and Technologies
 I will draw on open international datasets:
 * Fund for Peace’s Fragile States Index (FSI) will serve as the target variable — a yearly stability score per country.
 * World Bank Open Data will provide features such as GDP per capita, unemployment, trade openness, inflation and public debt.
-* United Nations Development Programme (UNDP) Human Development Index will supply education, health and income components (social variables). The workflow will begin with data acquisition and cleaning. Next, I will train and compare various machine learning models (I do not know which one yet) to estimate each country’s stability score.( As a stretch goal I may also include Monte Carlo simulations to explore causal impacts of major shocks and scenario-based future instability risk and see if it affects its stability score.)
+* United Nations Development Programme (UNDP) Human Development Index will supply education, health and income components (social variables). The workflow will begin with data acquisition and cleaning.Then, I will code and use as a benchmark model using panel regression with fixed effect. Next I will train and compare various machine learning models (2 supervised,Random Forest, XGBoost, 1 semi-supervised, Label Spreading, and 1 unsupervised, K-means clustering ) to estimate each country’s stability score and compare them fo find best one.( As a stretch goal I may also include Monte Carlo simulations to explore causal impacts of major shocks and scenario-based future instability risk and see if it affects its stability score.)
 
 Expected Challenges and How I’ll Address Them
 * Country selection and coverage: I may not use all countries if data quality varies. I will select a subset of countries with reliable data across years to ensure consistency.
 * Data quality and missing values: Different sources may have gaps ,misalignments or the trend is not explaining what it should be.
-* Model choice and interpretability: Choosing the right machine learning model is crucial, ill have to do some more research on the different machine learning models.
+* Model choice and interpretability: Choosing the right machine learning model is crucial, ill have to do some more research on the different machine learning model and on the hyperparameters.
 
 Success Criteria
-* Machine learning accuracy >-70-80% (i am not sure yet) (if classification into stable vs unstable).
+* Machine learning accuracy >-70-% .
 * Clear visualisations ccomapring model stability score and real one.
 * A reproducible codebase with documentation and notebooks that support the project’s findings.
 
