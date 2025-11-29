@@ -3,17 +3,26 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10
+  - python=3.12
   - pip
+  # Data manipulation and analysis
   - numpy
   - pandas
+  # Machine learning
   - scikit-learn
+  # Visualization
   - matplotlib
   - seaborn
+  # Development tools
   - jupyter
+  - black
+  - isort
+  - flake8
+  - pre-commit
+  # Testing
   - pytest
   - pytest-cov
   - pip:
-      - linearmodels  # For panel regression
-      - xgboost
-      - statsmodels
+      - linearmodels  # Panel regression
+      - xgboost       # Gradient boosting
+      - statsmodels   # Statistical models
