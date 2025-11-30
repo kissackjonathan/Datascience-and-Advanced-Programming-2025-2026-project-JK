@@ -5,6 +5,7 @@ Main Entry Point for Political Stability Analysis
 Supports multiple modes:
 - dynamic_panel: Panel data econometrics with fixed/random effects
 - ml_random_forest: Random Forest with GridSearch optimization
+- ml_xgboost: XGBoost with GridSearch optimization
 - predict: Future predictions (not yet implemented)
 - benchmark: Model comparison (not yet implemented)
 """
@@ -15,7 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.models.panel_models import PanelAnalyzer
-from src.models.ml_models import RandomForestPredictor
+from src.models.ml_models import RandomForestPredictor, XGBoostPredictor
 from src.utils.logging_config import setup_logging
 from src.utils.data_utils import get_train_test_split
 
@@ -42,7 +43,7 @@ Examples:
 
     parser.add_argument(
         '--mode',
-        choices=['dynamic_panel', 'predict', 'benchmark', 'ml_random_forest'],
+        choices=['dynamic_panel', 'predict', 'benchmark', 'ml_random_forest', 'ml_xgboost'],
         default='dynamic_panel',
         help='Analysis mode to run (default: dynamic_panel)'
     )
@@ -147,6 +148,15 @@ Examples:
 
         elif args.mode == 'ml_random_forest':
             run_ml_random_forest_analysis(
+                data_path=data_path,
+                target=target,
+                predictors=predictors,
+                train_end_year=args.train_end_year,
+                logger=logger
+            )
+
+        elif args.mode == 'ml_xgboost':
+            run_ml_xgboost_analysis(
                 data_path=data_path,
                 target=target,
                 predictors=predictors,
@@ -449,6 +459,150 @@ def run_ml_random_forest_analysis(
         f.write("CROSS-VALIDATION RESULTS\n")
         f.write("-" * 100 + "\n")
         f.write(f"Best CV R²: {rf_model.grid_search.best_score_:.4f}\n\n")
+
+        f.write("TEST SET PERFORMANCE\n")
+        f.write("-" * 100 + "\n")
+        f.write(f"Test R²: {test_metrics['r2']:.4f}\n")
+        f.write(f"Test RMSE: {test_metrics['rmse']:.4f}\n")
+        f.write(f"Test MAE: {test_metrics['mae']:.4f}\n\n")
+
+        f.write("FEATURE IMPORTANCE\n")
+        f.write("-" * 100 + "\n")
+        for feature, importance in feature_importance.items():
+            f.write(f"{feature:30s}: {importance:.4f}\n")
+
+    logger.info(f"\n✅ Results saved to: {results_file}")
+
+
+def run_ml_xgboost_analysis(
+    data_path: Path,
+    target: str,
+    predictors: list,
+    train_end_year: int,
+    logger
+) -> None:
+    """
+    Run XGBoost analysis with GridSearch optimization.
+
+    Why XGBoost:
+    - Gradient boosting (sequential learning)
+    - Strong regularization (L1/L2)
+    - Often better than Random Forest
+
+    Parameters
+    ----------
+    data_path : Path
+        Path to data file
+    target : str
+        Dependent variable
+    predictors : list
+        Independent variables
+    train_end_year : int
+        Last year to include in training set (default: 2017)
+    logger : logging.Logger
+        Logger instance
+    """
+    # Load data
+    logger.info(f"Loading data from: {data_path}")
+    df = pd.read_csv(data_path)
+    logger.info(f"Data shape: {df.shape}")
+
+    # Train/test split (CONSISTENT with other models)
+    logger.info("")
+    logger.info("=" * 100)
+    logger.info("TRAIN/TEST SPLIT")
+    logger.info("=" * 100)
+
+    df_train, df_test = get_train_test_split(df, train_end_year=train_end_year)
+
+    logger.info(f"Train period: {df_train['Year'].min()}-{df_train['Year'].max()}")
+    logger.info(f"Test period: {df_test['Year'].min()}-{df_test['Year'].max()}")
+    logger.info(f"Train size: {len(df_train)} observations")
+    logger.info(f"Test size: {len(df_test)} observations")
+
+    # Prepare features and target
+    X_train = df_train[predictors]
+    y_train = df_train[target]
+    X_test = df_test[predictors]
+    y_test = df_test[target]
+
+    # Drop missing values
+    train_mask = ~(X_train.isna().any(axis=1) | y_train.isna())
+    test_mask = ~(X_test.isna().any(axis=1) | y_test.isna())
+
+    X_train = X_train[train_mask]
+    y_train = y_train[train_mask]
+    X_test = X_test[test_mask]
+    y_test = y_test[test_mask]
+
+    logger.info(f"Train size (after dropping NaN): {len(X_train)}")
+    logger.info(f"Test size (after dropping NaN): {len(X_test)}")
+
+    # Initialize and train model
+    logger.info("")
+    logger.info("=" * 100)
+    logger.info("XGBOOST TRAINING WITH GRIDSEARCH")
+    logger.info("=" * 100)
+
+    xgb_model = XGBoostPredictor(logger=logger)
+    xgb_model.fit(X_train, y_train, cv=5)
+
+    # Evaluate on test set
+    logger.info("")
+    logger.info("=" * 100)
+    logger.info("TEST SET EVALUATION")
+    logger.info("=" * 100)
+
+    test_metrics = xgb_model.evaluate(X_test, y_test)
+
+    logger.info(f"Test R²: {test_metrics['r2']:.4f}")
+    logger.info(f"Test RMSE: {test_metrics['rmse']:.4f}")
+    logger.info(f"Test MAE: {test_metrics['mae']:.4f}")
+
+    # Feature importance
+    logger.info("")
+    logger.info("=" * 100)
+    logger.info("FEATURE IMPORTANCE")
+    logger.info("=" * 100)
+
+    feature_importance = xgb_model.get_feature_importance()
+    for feature, importance in feature_importance.items():
+        logger.info(f"{feature:30s}: {importance:.4f}")
+
+    # Save model (to project root)
+    project_root = Path(__file__).parent
+    model_dir = project_root / 'trained_models'
+    model_path = model_dir / 'xgboost_political_stability.pkl'
+    xgb_model.save_model(model_path)
+
+    # Save results (to project root)
+    results_dir = project_root / 'results'
+    results_dir.mkdir(exist_ok=True)
+    results_file = results_dir / 'ml_xgboost_results.txt'
+
+    with open(results_file, 'w') as f:
+        f.write("=" * 100 + "\n")
+        f.write("XGBOOST RESULTS - POLITICAL STABILITY PREDICTION\n")
+        f.write("=" * 100 + "\n\n")
+
+        f.write("CONFIGURATION\n")
+        f.write("-" * 100 + "\n")
+        f.write(f"Target: {target}\n")
+        f.write(f"Predictors: {', '.join(predictors)}\n")
+        f.write(f"Train period: {df_train['Year'].min()}-{df_train['Year'].max()}\n")
+        f.write(f"Test period: {df_test['Year'].min()}-{df_test['Year'].max()}\n")
+        f.write(f"Train size: {len(X_train)}\n")
+        f.write(f"Test size: {len(X_test)}\n\n")
+
+        f.write("BEST HYPERPARAMETERS\n")
+        f.write("-" * 100 + "\n")
+        for param, value in xgb_model.best_params_.items():
+            f.write(f"{param}: {value}\n")
+        f.write("\n")
+
+        f.write("CROSS-VALIDATION RESULTS\n")
+        f.write("-" * 100 + "\n")
+        f.write(f"Best CV R²: {xgb_model.grid_search.best_score_:.4f}\n\n")
 
         f.write("TEST SET PERFORMANCE\n")
         f.write("-" * 100 + "\n")

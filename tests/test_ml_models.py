@@ -392,5 +392,267 @@ class TestDataUtils:
         assert df_test['Year'].min() == 2018
 
 
+class TestXGBoostPredictor:
+    """Test suite for XGBoostPredictor class."""
+
+    def test_initialization(self, logger):
+        """Test model initialization."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            model = XGBoostPredictor(logger=logger)
+
+            assert model.model is None
+            assert model.grid_search is None
+            assert model.best_params_ is None
+            assert model.feature_importance_ is None
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_fit_with_default_params(self, sample_data, logger):
+        """Test model fitting with default parameters (small grid)."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            # Very small param grid for fast testing
+            param_grid = {
+                'n_estimators': [10, 20],
+                'max_depth': [3],
+                'learning_rate': [0.1],
+                'subsample': [1.0],
+                'colsample_bytree': [1.0],
+                'reg_alpha': [0],
+                'reg_lambda': [1]
+            }
+
+            model = XGBoostPredictor(logger=logger)
+            model.fit(X_train, y_train, param_grid=param_grid, cv=2)
+
+            # Verify model was fitted
+            assert model.model is not None
+            assert model.grid_search is not None
+            assert model.best_params_ is not None
+            assert model.feature_importance_ is not None
+
+            # Verify best params are from grid
+            assert model.best_params_['n_estimators'] in [10, 20]
+            assert model.best_params_['max_depth'] == 3
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_predict(self, sample_data, logger):
+        """Test prediction on new data."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            param_grid = {
+                'n_estimators': [10],
+                'max_depth': [3],
+                'learning_rate': [0.1],
+                'subsample': [1.0],
+                'colsample_bytree': [1.0],
+                'reg_alpha': [0],
+                'reg_lambda': [1]
+            }
+
+            model = XGBoostPredictor(logger=logger)
+            model.fit(X_train, y_train, param_grid=param_grid, cv=2)
+
+            predictions = model.predict(X_test)
+
+            # Verify predictions shape
+            assert len(predictions) == len(X_test)
+            assert isinstance(predictions, np.ndarray)
+            assert np.all(np.isfinite(predictions))
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_predict_without_fit_raises_error(self, sample_data, logger):
+        """Test that predict raises error if model not fitted."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            model = XGBoostPredictor(logger=logger)
+
+            with pytest.raises(ValueError, match="Model not fitted"):
+                model.predict(X_test)
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_evaluate(self, sample_data, logger):
+        """Test model evaluation metrics."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            param_grid = {
+                'n_estimators': [20],
+                'max_depth': [5],
+                'learning_rate': [0.1],
+                'subsample': [0.8],
+                'colsample_bytree': [0.8],
+                'reg_alpha': [0],
+                'reg_lambda': [1]
+            }
+
+            model = XGBoostPredictor(logger=logger)
+            model.fit(X_train, y_train, param_grid=param_grid, cv=2)
+
+            metrics = model.evaluate(X_test, y_test)
+
+            # Verify all metrics present
+            assert 'r2' in metrics
+            assert 'rmse' in metrics
+            assert 'mae' in metrics
+            assert 'n_samples' in metrics
+
+            # Verify metric values reasonable
+            assert metrics['n_samples'] == len(X_test)
+            assert metrics['rmse'] > 0
+            assert metrics['mae'] > 0
+            assert metrics['r2'] > -1
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_feature_importance(self, sample_data, logger):
+        """Test feature importance extraction."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            param_grid = {
+                'n_estimators': [20],
+                'max_depth': [5],
+                'learning_rate': [0.1],
+                'subsample': [0.8],
+                'colsample_bytree': [0.8],
+                'reg_alpha': [0],
+                'reg_lambda': [1]
+            }
+
+            model = XGBoostPredictor(logger=logger)
+            model.fit(X_train, y_train, param_grid=param_grid, cv=2)
+
+            importance = model.get_feature_importance()
+
+            # Verify importance for all features
+            assert len(importance) == X_train.shape[1]
+
+            # Verify sorted descending
+            assert list(importance) == sorted(importance.values, reverse=True)
+
+            # Verify all importances are non-negative
+            assert all(importance >= 0)
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_save_and_load_model(self, sample_data, logger, temp_model_dir):
+        """Test model persistence (save/load)."""
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            param_grid = {
+                'n_estimators': [10],
+                'max_depth': [3],
+                'learning_rate': [0.1],
+                'subsample': [1.0],
+                'colsample_bytree': [1.0],
+                'reg_alpha': [0],
+                'reg_lambda': [1]
+            }
+
+            # Train and save
+            model = XGBoostPredictor(logger=logger)
+            model.fit(X_train, y_train, param_grid=param_grid, cv=2)
+
+            model_path = temp_model_dir / 'test_xgboost.pkl'
+            model.save_model(model_path)
+
+            # Verify file created
+            assert model_path.exists()
+
+            # Load and verify predictions match
+            model_loaded = XGBoostPredictor(logger=logger)
+            model_loaded.load_model(model_path)
+
+            pred_original = model.predict(X_test)
+            pred_loaded = model_loaded.predict(X_test)
+
+            np.testing.assert_array_almost_equal(pred_original, pred_loaded)
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+    def test_no_scaler_used(self, sample_data, logger):
+        """
+        Test that XGBoostPredictor does NOT use StandardScaler.
+
+        Why this test:
+        - Ensures we don't accidentally add scaling
+        - Tree-based models don't need scaling
+        """
+        try:
+            from src.models.ml_models import XGBoostPredictor, XGBOOST_AVAILABLE
+
+            if not XGBOOST_AVAILABLE:
+                pytest.skip("XGBoost not available")
+
+            X_train, X_test, y_train, y_test = sample_data
+
+            model = XGBoostPredictor(logger=logger)
+
+            # Verify no scaler attribute
+            assert not hasattr(model, 'scaler')
+
+            # Fit and verify predictions work without scaling
+            param_grid = {
+                'n_estimators': [10],
+                'max_depth': [3],
+                'learning_rate': [0.1],
+                'subsample': [1.0],
+                'colsample_bytree': [1.0],
+                'reg_alpha': [0],
+                'reg_lambda': [1]
+            }
+
+            model.fit(X_train, y_train, param_grid=param_grid, cv=2)
+            predictions = model.predict(X_test)
+
+            # Should work fine without scaling
+            assert len(predictions) == len(X_test)
+        except ImportError:
+            pytest.skip("XGBoost not available or libomp missing")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
