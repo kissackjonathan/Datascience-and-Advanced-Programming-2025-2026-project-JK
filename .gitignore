@@ -56,6 +56,7 @@ results/*.pdf
 results/*.html
 
 # Models
+trained_models/
 *.pkl
 *.joblib
 *.h5

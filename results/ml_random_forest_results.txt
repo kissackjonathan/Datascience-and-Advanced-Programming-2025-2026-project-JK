@@ -1,0 +1,41 @@
+====================================================================================================
+RANDOM FOREST RESULTS - POLITICAL STABILITY PREDICTION
+====================================================================================================
+
+CONFIGURATION
+----------------------------------------------------------------------------------------------------
+Target: political_stability
+Predictors: gdp_per_capita, gdp_growth, unemployment_ilo, inflation_cpi, trade_gdp_pct, rule_of_law, government_effectiveness, hdi
+Train period: 1996-2017
+Test period: 2018-2023
+Train size: 3154
+Test size: 996
+
+BEST HYPERPARAMETERS
+----------------------------------------------------------------------------------------------------
+max_depth: 10
+max_features: sqrt
+min_samples_leaf: 4
+min_samples_split: 10
+n_estimators: 100
+
+CROSS-VALIDATION RESULTS
+----------------------------------------------------------------------------------------------------
+Best CV R²: 0.6084
+
+TEST SET PERFORMANCE
+----------------------------------------------------------------------------------------------------
+Test R²: 0.7544
+Test RMSE: 0.4687
+Test MAE: 0.3604
+
+FEATURE IMPORTANCE
+----------------------------------------------------------------------------------------------------
+rule_of_law                   : 0.3687
+government_effectiveness      : 0.1932
+hdi                           : 0.1213
+gdp_per_capita                : 0.1199
+trade_gdp_pct                 : 0.0866
+inflation_cpi                 : 0.0467
+unemployment_ilo              : 0.0412
+gdp_growth                    : 0.0224
