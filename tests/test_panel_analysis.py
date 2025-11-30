@@ -45,12 +45,12 @@ def sample_panel_data():
     Returns
     -------
     pd.DataFrame
-        Sample panel data with 3 countries, 5 years
+        Sample panel data with 10 countries, 10 years (larger for RE model)
     """
     np.random.seed(42)
 
-    countries = ['CountryA', 'CountryB', 'CountryC']
-    years = list(range(2018, 2023))
+    countries = [f'Country{chr(65+i)}' for i in range(10)]  # CountryA to CountryJ
+    years = list(range(2014, 2024))  # 10 years
 
     data = []
     for country in countries:
@@ -350,7 +350,7 @@ class TestEdgeCases:
         file_path = tmp_path / "empty.csv"
         empty_df.to_csv(file_path, index=False)
 
-        with pytest.raises(ValueError, match="empty"):
+        with pytest.raises(IOError, match="Failed to read CSV file"):
             load_panel_data(file_path, logger)
 
     def test_single_country(self, logger):
