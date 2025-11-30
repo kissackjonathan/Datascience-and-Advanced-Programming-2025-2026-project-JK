@@ -328,6 +328,8 @@ class PanelAnalyzer:
             X = self.df_panel[self.predictors]
             residuals = self.fe_results.resids
 
+            # Note: Breusch-Pagan requires at least 2 columns including a constant term
+            # for auxiliary regression of squared residuals on regressors
             X_with_const = add_constant(X, has_constant='add')
             lm_stat, lm_pval, fstat, f_pval = het_breuschpagan(residuals, X_with_const)
 
@@ -377,6 +379,8 @@ class PanelAnalyzer:
         try:
             from sklearn.linear_model import LinearRegression
 
+            # Note: Differencing mixed-type DataFrames (numeric + string indices) causes
+            # "unsupported operand type" errors. Extract numeric columns first.
             df_sorted = self.df_panel.sort_index()
             numeric_cols = [self.target] + self.predictors
             df_numeric = df_sorted[numeric_cols]

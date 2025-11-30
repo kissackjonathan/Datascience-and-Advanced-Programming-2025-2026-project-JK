@@ -476,6 +476,8 @@ def wooldridge_test_serial_correlation(
 
     try:
         # First differences - select only numeric columns
+        # Note: Differencing mixed-type DataFrames (numeric + string indices) causes
+        # "unsupported operand type" errors. Extract numeric columns first.
         df_sorted = df_panel.sort_index()
 
         # Select all numeric columns
@@ -578,6 +580,8 @@ def breusch_pagan_test(
         residuals = model_results.resids
 
         # Add constant to X for the test
+        # Note: Breusch-Pagan requires at least 2 columns including a constant term
+        # for auxiliary regression of squared residuals on regressors
         X_with_const = add_constant(X, has_constant='add')
 
         lm_stat, lm_pval, fstat, f_pval = het_breuschpagan(
