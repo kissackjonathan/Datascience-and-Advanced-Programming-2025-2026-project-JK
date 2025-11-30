@@ -182,14 +182,24 @@ class PanelAnalyzer:
         except Exception as e:
             raise RuntimeError(f"Failed to create panel structure: {e}")
 
-    def train_test_split(self, test_years: int = 3) -> 'PanelAnalyzer':
+    def train_test_split(
+        self,
+        test_years: Optional[int] = None,
+        train_end_year: Optional[int] = None,
+        test_ratio: float = 0.2
+    ) -> 'PanelAnalyzer':
         """
         Split panel data by time (temporal split for out-of-sample validation).
 
         Parameters
         ----------
-        test_years : int, default=3
+        test_years : int, optional
             Number of most recent years to use as test set
+        train_end_year : int, optional
+            Last year to include in training set (test starts from train_end_year + 1)
+            Takes precedence over test_years if specified
+        test_ratio : float, default=0.2
+            Ratio of data to use for testing (used if neither test_years nor train_end_year specified)
 
         Returns
         -------
@@ -200,8 +210,20 @@ class PanelAnalyzer:
             raise RuntimeError("Must call prepare_panel_structure() first")
 
         max_year = self.df_panel.index.get_level_values(1).max()
-        # Fixed: +1 to ensure exactly test_years in test set
-        train_cutoff = max_year - test_years + 1
+        min_year = self.df_panel.index.get_level_values(1).min()
+
+        # Determine cutoff year
+        if train_end_year is not None:
+            # Use explicit train end year
+            train_cutoff = train_end_year + 1
+        elif test_years is not None:
+            # Use test_years parameter (original behavior)
+            train_cutoff = max_year - test_years + 1
+        else:
+            # Calculate based on test_ratio (default 80/20 split)
+            total_years = max_year - min_year + 1
+            test_years_calc = int(total_years * test_ratio)
+            train_cutoff = max_year - test_years_calc + 1
 
         self.df_train = self.df_panel[
             self.df_panel.index.get_level_values(1) < train_cutoff
@@ -210,7 +232,12 @@ class PanelAnalyzer:
             self.df_panel.index.get_level_values(1) >= train_cutoff
         ]
 
+        train_years = self.df_train.index.get_level_values(1).unique()
+        test_years_actual = self.df_test.index.get_level_values(1).unique()
+
         self.logger.info(f"Train/Test split: cutoff year = {train_cutoff}")
+        self.logger.info(f"Training period: {train_years.min():.0f}-{train_years.max():.0f}")
+        self.logger.info(f"Test period: {test_years_actual.min():.0f}-{test_years_actual.max():.0f}")
         self.logger.info(f"Training set: {len(self.df_train)} observations")
         self.logger.info(f"Test set: {len(self.df_test)} observations")
 

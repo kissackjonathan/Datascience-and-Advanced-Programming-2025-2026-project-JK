@@ -49,8 +49,22 @@ Examples:
     parser.add_argument(
         '--test_years',
         type=int,
-        default=3,
-        help='Number of years for test set (default: 3)'
+        default=None,
+        help='Number of years for test set (optional)'
+    )
+
+    parser.add_argument(
+        '--train_end_year',
+        type=int,
+        default=2016,
+        help='Last year to include in training set (default: 2016 for 80/20 split)'
+    )
+
+    parser.add_argument(
+        '--test_ratio',
+        type=float,
+        default=0.2,
+        help='Test set ratio if neither test_years nor train_end_year specified (default: 0.2)'
     )
 
     parser.add_argument(
@@ -71,7 +85,12 @@ Examples:
     logger.info("POLITICAL STABILITY PANEL DATA ANALYSIS")
     logger.info("=" * 100)
     logger.info(f"Mode: {args.mode}")
-    logger.info(f"Test years: {args.test_years}")
+    if args.train_end_year is not None:
+        logger.info(f"Train end year: {args.train_end_year}")
+    elif args.test_years is not None:
+        logger.info(f"Test years: {args.test_years}")
+    else:
+        logger.info(f"Test ratio: {args.test_ratio}")
 
     # Robust path handling: resolve relative to main.py location
     project_root = Path(__file__).resolve().parent
@@ -105,6 +124,8 @@ Examples:
                 target=target,
                 predictors=predictors,
                 test_years=args.test_years,
+                train_end_year=args.train_end_year,
+                test_ratio=args.test_ratio,
                 logger=logger
             )
 
@@ -144,6 +165,8 @@ def run_dynamic_panel_analysis(
     target: str,
     predictors: list,
     test_years: int,
+    train_end_year: int,
+    test_ratio: float,
     logger
 ) -> None:
     """
@@ -157,8 +180,12 @@ def run_dynamic_panel_analysis(
         Dependent variable
     predictors : list
         Independent variables
-    test_years : int
+    test_years : int, optional
         Number of years for test set
+    train_end_year : int, optional
+        Last year to include in training set
+    test_ratio : float
+        Test set ratio (default 0.2 for 80/20 split)
     logger : logging.Logger
         Logger instance
     """
@@ -174,7 +201,11 @@ def run_dynamic_panel_analysis(
     analyzer.load_data().prepare_panel_structure()
 
     # Train/test split
-    analyzer.train_test_split(test_years=test_years)
+    analyzer.train_test_split(
+        test_years=test_years,
+        train_end_year=train_end_year,
+        test_ratio=test_ratio
+    )
 
     logger.info("")
     logger.info("=" * 100)
