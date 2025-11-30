@@ -56,8 +56,8 @@ Examples:
     parser.add_argument(
         '--train_end_year',
         type=int,
-        default=2016,
-        help='Last year to include in training set (default: 2016 for 80/20 split)'
+        default=2017,
+        help='Last year to include in training set (default: 2017 for optimal performance)'
     )
 
     parser.add_argument(
