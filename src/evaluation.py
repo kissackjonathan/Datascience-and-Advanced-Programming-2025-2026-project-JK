@@ -35,14 +35,23 @@ DIVERGING_PALETTE = ["#1f77b4", "#ff7f0e"]  # Blue vs Orange
 
 
 def display_results_table(results_df: pd.DataFrame, title: str = "Model Results"):
-    # Display model results in a formatted table
+    """
+    Display model results in a formatted table.
+
+    Args:
+        results_df (pd.DataFrame): DataFrame containing model results with columns r2, rmse, mae
+        title (str): Table title (default: "Model Results")
+
+    Returns:
+        None
+    """
     print(f"\n{'=' * 80}")
     print(f"{title:^80}")
     print("=" * 80)
     print(f"{'Rank':<6} {'Model':<25} {'R^2':>10} {'RMSE':>10} {'MAE':>10}")
     print("-" * 80)
 
-    # Sort by R^2 descending
+    # Sort models by R^2 descending (best models first)
     results_sorted = results_df.sort_values("r2", ascending=False).reset_index(
         drop=True
     )
@@ -59,14 +68,23 @@ def display_results_table(results_df: pd.DataFrame, title: str = "Model Results"
 
 
 def compare_models(benchmark_df: pd.DataFrame, test_df: pd.DataFrame):
-    # Compare training (benchmark) vs test performance for all models
+    """
+    Compare training (benchmark) vs test performance for all models.
+
+    Args:
+        benchmark_df (pd.DataFrame): Training set results with columns model, r2
+        test_df (pd.DataFrame): Test set results with columns model, r2
+
+    Returns:
+        None
+    """
     print(f"\n{'=' * 80}")
     print(f"{'MODEL COMPARISON: TRAINING VS TEST':^80}")
     print("=" * 80)
     print(f"{'Model':<25} {'Train R^2':>12} {'Test R^2':>12} {'Difference':>12}")
     print("-" * 80)
 
-    # Merge on model name
+    # Merge training and test results by model name
     comparison = pd.merge(
         benchmark_df[["model", "r2"]],
         test_df[["model", "r2"]],
@@ -74,6 +92,7 @@ def compare_models(benchmark_df: pd.DataFrame, test_df: pd.DataFrame):
         suffixes=("_train", "_test"),
     )
 
+    # Calculate train-test gap (positive = overfitting, negative = underfitting)
     comparison["diff"] = comparison["r2_train"] - comparison["r2_test"]
     comparison = comparison.sort_values("r2_test", ascending=False)
 
@@ -98,7 +117,19 @@ def plot_predictions(
     output_path: Path,
     show_metrics: bool = True,
 ):
-    # Create scatter plot of actual vs predicted values
+    """
+    Create scatter plot of actual vs predicted values.
+
+    Args:
+        y_true (np.ndarray): Actual target values
+        y_pred (np.ndarray): Predicted target values
+        model_name (str): Name of the model for plot title
+        output_path (Path): Path where plot image will be saved
+        show_metrics (bool): Whether to display metrics text box on plot (default: True)
+
+    Returns:
+        None
+    """
     plt.figure(figsize=(10, 6))
 
     # Scatter plot - use consistent blue color
@@ -111,9 +142,11 @@ def plot_predictions(
         linewidth=0.5,
     )
 
-    # Perfect prediction line - use warning red for reference
+    # Calculate plot axis range to ensure perfect prediction line spans entire plot
     min_val = min(y_true.min(), y_pred.min())
     max_val = max(y_true.max(), y_pred.max())
+
+    # Perfect prediction line (y=x) - use warning red for reference
     plt.plot(
         [min_val, max_val],
         [min_val, max_val],
@@ -123,10 +156,13 @@ def plot_predictions(
         label="Perfect Prediction",
     )
 
-    # Calculate metrics
+    # Calculate and display performance metrics
     if show_metrics:
+        # Calculate coefficient of determination (proportion of variance explained)
         r2 = r2_score(y_true, y_pred)
+        # Calculate root mean squared error (average prediction error magnitude)
         rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        # Calculate mean absolute error (average absolute prediction error)
         mae = mean_absolute_error(y_true, y_pred)
 
         # Add metrics text box
@@ -159,7 +195,19 @@ def plot_predictions(
 def plot_residuals(
     y_true: np.ndarray, y_pred: np.ndarray, model_name: str, output_path: Path
 ):
-    # Create residual plot to check for patterns
+    """
+    Create residual plot to check for patterns (model diagnostics).
+
+    Args:
+        y_true (np.ndarray): Actual target values
+        y_pred (np.ndarray): Predicted target values
+        model_name (str): Name of the model for plot title
+        output_path (Path): Path where plot image will be saved
+
+    Returns:
+        None
+    """
+    # Calculate residuals (prediction errors)
     residuals = y_true - y_pred
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -285,10 +333,20 @@ def plot_model_comparison(
 def create_correlation_heatmap(
     data: pd.DataFrame, output_path: Path, title: str = "Feature Correlation Matrix"
 ):
-    # Create correlation heatmap for features
+    """
+    Create correlation heatmap for features.
+
+    Args:
+        data (pd.DataFrame): DataFrame containing features to correlate
+        output_path (Path): Path where heatmap image will be saved
+        title (str): Heatmap title (default: "Feature Correlation Matrix")
+
+    Returns:
+        None
+    """
     plt.figure(figsize=(10, 8))
 
-    # Calculate correlation
+    # Calculate Pearson correlation matrix between all features
     corr = data.corr()
 
     # Create heatmap - coolwarm is appropriate for correlations (diverging)
@@ -317,7 +375,17 @@ def create_correlation_heatmap(
 def save_results_summary(
     results_df: pd.DataFrame, output_path: Path, description: str = ""
 ):
-    # Save results to CSV file
+    """
+    Save results to CSV file.
+
+    Args:
+        results_df (pd.DataFrame): Results DataFrame to save
+        output_path (Path): Path where CSV will be saved (parent directories created automatically)
+        description (str): Optional description to print (default: "")
+
+    Returns:
+        None
+    """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     results_df.to_csv(output_path, index=False)
 
@@ -1324,7 +1392,8 @@ def generate_regional_analysis(
 
 def generate_political_stability_evolution(data: pd.DataFrame, output_dir: Path):
     """
-    Generate a plot showing the average evolution of political stability across all countries.
+    Generate simple plot showing average political stability over time.
+    Calculates: sum of all country scores / number of countries per year.
 
     Args:
         data: DataFrame with MultiIndex (Country Name, Year) or regular columns
@@ -1346,91 +1415,78 @@ def generate_political_stability_evolution(data: pd.DataFrame, output_dir: Path)
     if "Year" not in df.columns or "political_stability" not in df.columns:
         raise ValueError("Data must contain 'Year' and 'political_stability' columns")
 
-    # Calculate average political stability per year
-    yearly_avg = (
-        df.groupby("Year")["political_stability"]
-        .agg(["mean", "std", "count"])
-        .reset_index()
-    )
+    # Calculate SIMPLE average per year: sum(scores) / count(countries)
+    yearly_avg = df.groupby("Year").agg({
+        "political_stability": ["sum", "count"]
+    }).reset_index()
 
-    # Calculate confidence interval (95%)
-    from scipy import stats
+    # Flatten column names
+    yearly_avg.columns = ["Year", "sum", "count"]
 
-    confidence = 0.95
-    yearly_avg["ci"] = yearly_avg.apply(
-        lambda row: stats.t.ppf((1 + confidence) / 2, row["count"] - 1)
-        * row["std"]
-        / np.sqrt(row["count"])
-        if row["count"] > 1
-        else 0,
-        axis=1,
-    )
+    # Calculate average: sum / count
+    yearly_avg["average"] = yearly_avg["sum"] / yearly_avg["count"]
 
-    # Create figure
+    # Create simple figure
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    # Plot main line
+    # Plot average line
     ax.plot(
         yearly_avg["Year"],
-        yearly_avg["mean"],
+        yearly_avg["average"],
         color=COLORS["primary"],
-        linewidth=2.5,
+        linewidth=3,
         marker="o",
-        markersize=6,
+        markersize=8,
         label="Average Political Stability",
     )
 
-    # Add confidence interval
-    ax.fill_between(
-        yearly_avg["Year"],
-        yearly_avg["mean"] - yearly_avg["ci"],
-        yearly_avg["mean"] + yearly_avg["ci"],
-        color=COLORS["primary"],
-        alpha=0.2,
-        label="95% Confidence Interval",
-    )
-
-    # Add standard deviation band
-    ax.fill_between(
-        yearly_avg["Year"],
-        yearly_avg["mean"] - yearly_avg["std"],
-        yearly_avg["mean"] + yearly_avg["std"],
-        color=COLORS["secondary"],
-        alpha=0.1,
-        label="±1 Standard Deviation",
-    )
-
     # Add horizontal line at 0
-    ax.axhline(y=0, color="gray", linestyle="--", linewidth=1, alpha=0.5)
+    ax.axhline(y=0, color="gray", linestyle="--", linewidth=1.5, alpha=0.5)
 
     # Formatting
-    ax.set_xlabel("Year", fontsize=12, fontweight="bold")
-    ax.set_ylabel("Political Stability Index", fontsize=12, fontweight="bold")
+    ax.set_xlabel("Year", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Political Stability Index (Average)", fontsize=14, fontweight="bold")
     ax.set_title(
-        "Global Political Stability Evolution\nAverage Across All Countries",
-        fontsize=14,
+        "Global Political Stability Evolution\nAverage Across All Countries Over Time",
+        fontsize=16,
         fontweight="bold",
         pad=20,
     )
-
-    # Add grid
     ax.grid(True, alpha=0.3, linestyle="--")
-
-    # Add legend
-    ax.legend(loc="best", fontsize=10, framealpha=0.9)
+    ax.legend(loc="best", fontsize=12, framealpha=0.9)
 
     # Add statistics box
-    min_year = yearly_avg["Year"].min()
-    max_year = yearly_avg["Year"].max()
-    min_stability = yearly_avg["mean"].min()
-    max_stability = yearly_avg["mean"].max()
-    avg_stability = yearly_avg["mean"].mean()
+    min_year = int(yearly_avg["Year"].min())
+    max_year = int(yearly_avg["Year"].max())
+    avg_value = yearly_avg["average"].mean()
+    min_value = yearly_avg["average"].min()
+    max_value = yearly_avg["average"].max()
 
-    stats_text = f"""Statistics ({int(min_year)}-{int(max_year)}):
-• Average: {avg_stability:.3f}
-• Minimum: {min_stability:.3f} ({int(yearly_avg[yearly_avg['mean'] == min_stability]['Year'].values[0])})
-• Maximum: {max_stability:.3f} ({int(yearly_avg[yearly_avg['mean'] == max_stability]['Year'].values[0])})
-• Countries: {df['Country Name'].nunique() if 'Country Name' in df.columns else 'N/A'}"""
+    # Set Y-axis limits to zoom in on the actual data range
+    # Add 20% margin above and below for better visibility
+    y_range = max_value - min_value
+    y_margin = y_range * 0.20
+    ax.set_ylim(min_value - y_margin, max_value + y_margin)
+
+    # Add more Y-axis ticks for better readability of small changes
+    from matplotlib.ticker import MaxNLocator
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=12))
+
+    # Find years for min and max
+    min_year_val = int(yearly_avg[yearly_avg["average"] == min_value]["Year"].values[0])
+    max_year_val = int(yearly_avg[yearly_avg["average"] == max_value]["Year"].values[0])
+
+    # Calculate total change
+    first_value = yearly_avg["average"].iloc[0]
+    last_value = yearly_avg["average"].iloc[-1]
+    total_change = last_value - first_value
+
+    stats_text = f"""Period: {min_year}-{max_year}
+• Overall Average: {avg_value:.3f}
+• Lowest: {min_value:.3f} (in {min_year_val})
+• Highest: {max_value:.3f} (in {max_year_val})
+• Total Change: {total_change:+.3f}
+• Countries: {int(yearly_avg['count'].mean())} avg per year"""
 
     ax.text(
         0.02,
@@ -1438,8 +1494,8 @@ def generate_political_stability_evolution(data: pd.DataFrame, output_dir: Path)
         stats_text,
         transform=ax.transAxes,
         verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8, edgecolor="gray"),
-        fontsize=9,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.9, edgecolor="gray"),
+        fontsize=11,
         family="monospace",
     )
 
@@ -1448,6 +1504,194 @@ def generate_political_stability_evolution(data: pd.DataFrame, output_dir: Path)
     output_file = (
         output_dir
         / f'political_stability_evolution_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+    )
+    plt.savefig(output_file, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    return output_file
+
+
+def generate_regional_stability_evolution(data: pd.DataFrame, output_dir: Path):
+    """
+    Generate a plot showing the evolution of political stability by region over time.
+    Shows one line per region to compare trends across different geographic areas.
+
+    Args:
+        data: DataFrame with MultiIndex (Country Name, Year) or regular columns
+        output_dir: Directory to save the plot
+
+    Returns:
+        Path to the saved plot
+    """
+    from datetime import datetime
+
+    # Ensure we have the data in the right format
+    df = data.copy()
+
+    # Reset index if it's a MultiIndex
+    if isinstance(df.index, pd.MultiIndex):
+        df = df.reset_index()
+
+    # Check if we have the required columns
+    if "Year" not in df.columns or "political_stability" not in df.columns:
+        raise ValueError("Data must contain 'Year' and 'political_stability' columns")
+
+    # Define regions (same as in generate_regional_analysis)
+    regions = {
+        "Europe": [
+            "France", "Germany", "Italy", "Spain", "United Kingdom", "Poland",
+            "Netherlands", "Belgium", "Greece", "Portugal", "Sweden", "Austria",
+            "Switzerland", "Norway", "Denmark", "Finland", "Ireland",
+        ],
+        "Asia": [
+            "China", "India", "Japan", "South Korea", "Indonesia", "Thailand",
+            "Malaysia", "Singapore", "Philippines", "Vietnam", "Pakistan", "Bangladesh",
+        ],
+        "Americas": [
+            "United States", "Canada", "Brazil", "Mexico", "Argentina", "Chile",
+            "Colombia", "Peru", "Venezuela",
+        ],
+        "Africa": [
+            "South Africa", "Nigeria", "Egypt", "Kenya", "Ghana", "Ethiopia",
+            "Morocco", "Algeria", "Tunisia",
+        ],
+        "Middle East": [
+            "Saudi Arabia", "United Arab Emirates", "Israel", "Turkey", "Iran",
+        ],
+    }
+
+    # Map countries to regions
+    def get_region(country):
+        for region, countries in regions.items():
+            if country in countries:
+                return region
+        return "Other"
+
+    if "Country Name" in df.columns:
+        df["Region"] = df["Country Name"].apply(get_region)
+    else:
+        raise ValueError("Data must contain 'Country Name' column")
+
+    # Calculate regional statistics per year
+    regional_yearly = (
+        df.groupby(["Region", "Year"])["political_stability"]
+        .agg(["mean", "std", "count"])
+        .reset_index()
+    )
+
+    # Define colors for each region
+    region_colors = {
+        "Europe": "#2E86AB",      # Blue
+        "Asia": "#A23B72",        # Purple
+        "Americas": "#F18F01",    # Orange
+        "Africa": "#C73E1D",      # Red
+        "Middle East": "#6A994E", # Green
+        "Other": "#95A3A4",       # Gray
+    }
+
+    region_markers = {
+        "Europe": "o",
+        "Asia": "s",
+        "Americas": "^",
+        "Africa": "D",
+        "Middle East": "v",
+        "Other": "P",
+    }
+
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12))
+
+    # ===== TOP PLOT: Regional Means Over Time =====
+    region_list = ["Europe", "Asia", "Americas", "Africa", "Middle East", "Other"]
+
+    for region in region_list:
+        region_data = regional_yearly[regional_yearly["Region"] == region]
+        if len(region_data) > 0:
+            ax1.plot(
+                region_data["Year"],
+                region_data["mean"],
+                color=region_colors[region],
+                linewidth=2.5,
+                marker=region_markers[region],
+                markersize=6,
+                label=f"{region} (n={region_data['count'].iloc[0]:.0f} countries)",
+                alpha=0.8,
+            )
+
+    # Add horizontal line at 0
+    ax1.axhline(y=0, color="gray", linestyle="--", linewidth=1, alpha=0.5)
+
+    # Formatting top plot
+    ax1.set_xlabel("Year", fontsize=12, fontweight="bold")
+    ax1.set_ylabel("Average Political Stability Index", fontsize=12, fontweight="bold")
+    ax1.set_title(
+        "Political Stability Evolution by Region\nAverage Trends Across Geographic Areas",
+        fontsize=14,
+        fontweight="bold",
+        pad=20,
+    )
+    ax1.grid(True, alpha=0.3, linestyle="--")
+    ax1.legend(loc="best", fontsize=10, framealpha=0.9, ncol=2)
+
+    # ===== BOTTOM PLOT: Regional Standard Deviations =====
+    for region in region_list:
+        region_data = regional_yearly[regional_yearly["Region"] == region]
+        if len(region_data) > 0:
+            ax2.plot(
+                region_data["Year"],
+                region_data["std"],
+                color=region_colors[region],
+                linewidth=2,
+                marker=region_markers[region],
+                markersize=5,
+                label=region,
+                alpha=0.7,
+            )
+
+    # Formatting bottom plot
+    ax2.set_xlabel("Year", fontsize=12, fontweight="bold")
+    ax2.set_ylabel("Standard Deviation", fontsize=12, fontweight="bold")
+    ax2.set_title(
+        "Political Stability Variability by Region\nWithin-Region Standard Deviation Over Time",
+        fontsize=14,
+        fontweight="bold",
+        pad=20,
+    )
+    ax2.grid(True, alpha=0.3, linestyle="--")
+    ax2.legend(loc="best", fontsize=10, framealpha=0.9, ncol=2)
+
+    # Add statistics box on top plot
+    min_year = df["Year"].min()
+    max_year = df["Year"].max()
+
+    # Calculate changes for each region
+    stats_lines = [f"Regional Changes ({int(min_year)}-{int(max_year)}):"]
+    for region in region_list:
+        region_data = regional_yearly[regional_yearly["Region"] == region].sort_values("Year")
+        if len(region_data) >= 2:
+            first_val = region_data["mean"].iloc[0]
+            last_val = region_data["mean"].iloc[-1]
+            change = last_val - first_val
+            stats_lines.append(f"• {region}: {change:+.3f}")
+
+    stats_text = "\n".join(stats_lines)
+
+    ax1.text(
+        0.02,
+        0.98,
+        stats_text,
+        transform=ax1.transAxes,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.9, edgecolor="gray"),
+        fontsize=9,
+        family="monospace",
+    )
+
+    plt.tight_layout()
+
+    output_file = (
+        output_dir
+        / f'regional_stability_evolution_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
     )
     plt.savefig(output_file, dpi=300, bbox_inches="tight")
     plt.close()
