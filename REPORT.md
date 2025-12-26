@@ -369,11 +369,38 @@ The warning during training compares Train vs CV performance. However, the **tru
 
 ### 3.5 Implementation
 
-Our implementation addresses several key technical challenges inherent to political stability prediction on global panel data. First, we developed a modular architecture in Python separating data loading ([src/data_loader.py](src/data_loader.py)), model training ([src/models.py](src/models.py)), and evaluation ([src/evaluation.py](src/evaluation.py)) into distinct modules, facilitating reproducibility and extension. Second, we resolved the panel data structure challenge by implementing country-specific forward-fill imputation that respects temporal ordering while avoiding data leakage across the train-test boundary. Third, we addressed the computational bottleneck of GridSearchCV by parallelizing hyperparameter search across CPU cores and implementing early stopping for gradient boosting methods. Fourth, we solved the feature scaling pipeline problem by creating separate StandardScaler instances for tree-based models (no scaling) versus distance-based models (StandardScaler fitted only on training data), preventing information leakage. Finally, we overcame the Dynamic Panel estimation complexity by integrating the linearmodels library's PanelOLS with entity and time fixed effects, clustered standard errors, and automatic handling of lagged dependent variables. The entire pipeline executes through a command-line interface ([main/main.py](main/main.py)) with 12 menu options covering data preparation, model training, evaluation, and visualization generation.
+**Code Architecture:** Modular Python implementation with three core modules ([src/data_loader.py](src/data_loader.py) for ETL pipeline, [src/models.py](src/models.py) for ML algorithms, [src/evaluation.py](src/evaluation.py) for metrics/visualizations) and CLI interface ([main/main.py](main/main.py)) with 12 menu options.
+
+**Parallel Processing:** All models use **GridSearchCV with `n_jobs=-1`** to distribute hyperparameter search across all CPU cores. For example, Random Forest tests 216 hyperparameter combinations (3 n_estimators × 4 max_depth × 3 min_samples_split × 3 min_samples_leaf × 2 max_features) across 5 CV folds = 1,080 model fits, parallelized across available cores. XGBoost internally parallelizes tree construction via OpenMP threading. This reduces training time from ~45 minutes (sequential) to ~8 minutes (8-core parallelization).
+
+**Key Technical Solutions:**
+1. **Panel data handling**: Hierarchical temporal imputation (±1/2/4 year medians within-country) using vectorized pandas operations, avoiding loops over 4,648 observations
+2. **Feature scaling pipeline**: Conditional StandardScaler—tree models (RF, XGBoost, GB) skip scaling; distance-based models (KNN, SVR, MLP, Elastic Net) use `Pipeline([StandardScaler(), model])` fitted only on training data to prevent leakage
+3. **Dynamic Panel estimation**: Integration with `linearmodels.PanelOLS` for entity/time fixed effects, clustered standard errors, and lagged dependent variables with automatic MultiIndex handling
+4. **Memory efficiency**: Session-based in-memory storage (no .pkl files) via global variables (SESSION_TRAIN_DATA, SESSION_TEST_DATA, SESSION_FULL_DATA, SESSION_TRAINED_MODELS)
+
+**Performance Optimizations:** NumPy/pandas vectorized operations for data transformations, scikit-learn's efficient C implementations for algorithms, matplotlib figure caching for visualizations.
 
 ### 3.6 Codebase & Reproducibility
 
-The complete codebase is available at the project repository with dependencies specified in both [environment.yml](environment.yml) (Conda) and [requirements.txt](requirements.txt) (pip). To reproduce our results: (1) install dependencies via `conda env create -f environment.yml && conda activate political-stability-prediction` or `pip install -r requirements.txt`; (2) run `python main/main.py` and select option [0] to verify environment setup; (3) execute options [1-4] sequentially for data preparation, feature engineering, model training, and evaluation. All models use random seed 42 for reproducibility. The test suite achieves 90% code coverage across 100 tests, executable via `pytest tests/ --cov=src`. A Streamlit dashboard ([main/dashboard.py](main/dashboard.py)) provides an interactive interface for non-technical users, accessible via `streamlit run main/dashboard.py`.
+**Environment Setup:**
+- **Dependencies**: [environment.yml](environment.yml) (Conda) or [requirements.txt](requirements.txt) (pip)
+- **Installation**: `conda env create -f environment.yml && conda activate political-stability-prediction` OR `pip install -r requirements.txt`
+- **Verification**: `python main/main.py` → option [0] checks Python 3.9+, pandas, scikit-learn, XGBoost installations
+
+**Reproduction Workflow:**
+1. **Data preparation** (option [1]): Loads 9 raw CSV files from [data/raw/](data/raw/), outputs [data/processed/full_data.csv](data/processed/full_data.csv), [train_data.csv](data/processed/train_data.csv), [test_data.csv](data/processed/test_data.csv)
+2. **Model training** (option [3]): Trains all 7 models with hyperparameter search, stores in-memory (SESSION_TRAINED_MODELS)
+3. **Evaluation** (option [4]): Generates metrics and 12 visualizations in [reports/figures/](reports/figures/)
+
+**Reproducibility Guarantees:**
+- **Random seed control**: `RANDOM_SEED = 42` in [src/models.py](src/models.py:33) propagated to all models (`random_state=42` in RandomForestRegressor, XGBRegressor, GradientBoostingRegressor, MLPRegressor, ElasticNet) and NumPy/Python RNG (`np.random.seed(42)`, `random.seed(42)`)
+- **Data determinism**: Temporal train-test split (1996-2017 vs 2018-2023) with no randomness; imputation uses deterministic median calculations
+- **Hyperparameter determinism**: GridSearchCV uses fixed CV folds (not shuffled) and deterministic scoring
+
+**Additional Resources:**
+- **Interactive dashboard**: `streamlit run main/dashboard.py` for non-technical users
+- **Test suite**: `pytest tests/ --cov=src` (90% coverage, 100 tests)
 
 ---
 
