@@ -49,11 +49,8 @@ data/raw/*.json
 data/raw/*.parquet
 data/processed/
 
-# Results
-results/*.png
-results/*.jpg
-results/*.pdf
-results/*.html
+# Results (entire directory ignored - created dynamically by main.py)
+results/
 
 # Models
 *.pkl
@@ -72,11 +69,16 @@ Thumbs.db
 
 # Testing
 .coverage
+coverage.json
 htmlcov/
 .pytest_cache/
 
 # MyPy
 .mypy_cache/
+
+# Logs
+logs/
+*.log
 
 # Large files
 *.zip
