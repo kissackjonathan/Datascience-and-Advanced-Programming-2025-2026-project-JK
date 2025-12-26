@@ -535,30 +535,8 @@ def generate_ml_vs_benchmark_comparison(
     bars3[best_rmse_idx].set_edgecolor("gold")
     bars3[best_rmse_idx].set_linewidth(3)
 
-    # Add legend - use consistent color palette
-    from matplotlib.patches import Patch
-
-    legend_elements = [
-        Patch(facecolor=COLORS["primary"], edgecolor="black", label="ML Models"),
-        Patch(
-            facecolor=COLORS["accent"],
-            edgecolor="black",
-            label="Dynamic Panel (Benchmark)",
-        ),
-        Patch(facecolor="white", edgecolor="gold", linewidth=3, label="Best Model"),
-    ]
-    fig.legend(
-        handles=legend_elements,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.98),
-        ncol=3,
-        fontsize=12,
-        frameon=True,
-        fancybox=True,
-        shadow=True,
-    )
-
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    # Legend removed to avoid overlapping with plots
+    plt.tight_layout()
 
     # Save figure
     output_file = (
@@ -1490,7 +1468,7 @@ def generate_political_stability_evolution(data: pd.DataFrame, output_dir: Path)
 
     ax.text(
         0.02,
-        0.98,
+        0.75,
         stats_text,
         transform=ax.transAxes,
         verticalalignment="top",
