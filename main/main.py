@@ -21,11 +21,19 @@ import os
 import random
 import subprocess
 import sys
+import time
+import webbrowser
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+
+try:
+    import requests
+except ImportError:
+    requests = None  # requests is optional for dashboard functionality
 
 # Add project root to sys.path so we can import from src/
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -33,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # ============================================================================
 # LOGGING CONFIGURATION (MUST BE DONE FIRST, BEFORE ALL IMPORTS)
 # ============================================================================
+# Tracks program execution and errors for debugging/monitoring model training progress
 # - Centralized logging for entire project
 # - All modules (src/models.py, src/data_loader.py, etc.) will use this config
 # - Prevents duplicate logging configurations
@@ -75,6 +84,7 @@ TRAINING_COMPLETED_THIS_SESSION = False
 SESSION_MODELS_DATA = None
 SESSION_TRAIN_DATA = None
 SESSION_TEST_DATA = None
+SESSION_FULL_DATA = None  # All data (1996-2023) for visualizations
 
 # Track completion status of each workflow step
 WORKFLOW_COMPLETION = {
@@ -175,7 +185,7 @@ def print_info(message: str):
 
 def get_project_paths():
     """Get all important project paths."""
-    # Since main.py is now in main/ folder, go up one level to get project root
+    # Since main.py is in main/ folder, go up one level to get project root
     project_root = Path(__file__).parent.parent
 
     paths = {
@@ -231,8 +241,11 @@ def check_environment():
         "xgboost",
         "linearmodels",
         "statsmodels",
+        "scipy",
+        "joblib",
         "matplotlib",
         "seaborn",
+        "plotly",
         "streamlit",
     ]
 
@@ -262,10 +275,15 @@ def check_environment():
     # Check for files - accept multiple formats
     # Each entry: (base_name, list_of_extensions)
     expected_files = [
-        ("GDP per capita", [".numbers", ".csv"]),  # GDP per capita.numbers
-        ("UNEMPLOYMENT_TOTAL", [".numbers", ".csv"]),  # UNEMPLOYMENT_TOTAL.numbers
-        ("inflation consumer", [".numbers", ".csv"]),  # inflation consumer.numbers
-        ("hdi_data", [".xlsx"]),  # hdi_data.xlsx
+        ("political stability", [".csv", ".numbers", ".xlsx"]),  # Target variable
+        ("GDP per capita", [".csv", ".numbers", ".xlsx"]),  # Economic indicator
+        ("UNEMPLOYMENT_TOTAL", [".csv", ".numbers", ".xlsx"]),  # Economic indicator
+        ("inflation consumer", [".csv", ".numbers", ".xlsx"]),  # Economic indicator
+        ("GDP_GROWTH_%", [".csv", ".numbers", ".xlsx"]),  # Economic indicator
+        ("effectiveness", [".csv", ".numbers", ".xlsx"]),  # Governance indicator
+        ("rule of law", [".csv", ".numbers", ".xlsx"]),  # Governance indicator
+        ("trade", [".csv", ".numbers", ".xlsx"]),  # Economic indicator
+        ("hdi_data", [".xlsx"]),  # Social indicator (special format)
     ]
 
     for base_name, extensions in expected_files:
@@ -273,6 +291,7 @@ def check_environment():
         for ext in extensions:
             filepath = data_raw / f"{base_name}{ext}"
             if filepath.exists():
+                # Convert bytes to megabytes (1 MB = 1024 * 1024 bytes)
                 size_mb = filepath.stat().st_size / (1024 * 1024)
                 print_success(f"{base_name}{ext} ({size_mb:.2f} MB)")
                 found = True
@@ -331,8 +350,6 @@ def run_data_preparation():
 
     try:
         # Import data loader module
-        import pandas as pd
-
         from src.data_loader import load_data
 
         paths = get_project_paths()
@@ -526,10 +543,6 @@ def save_detailed_results(
     elapsed : float
         Training time in seconds
     """
-    from pathlib import Path
-
-    import numpy as np
-
     filepath = Path(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
@@ -620,10 +633,6 @@ def save_detailed_results(
 
 def train_all_ml_models():
     """Train all models: 7 ML models + Dynamic Panel Analysis."""
-    import time
-
-    import pandas as pd
-
     from src.models import (
         ElasticNetPredictor,
         GradientBoostingPredictor,
@@ -720,7 +729,7 @@ def train_all_ml_models():
 
             elapsed = time.time() - start_time
 
-            # Display results with new metrics (Adjusted R², F-statistic)
+            # Display results with new metrics (Adjusted R^2, F-statistic)
             print(
                 f"  {Colors.BRIGHT_GREEN}OK Test R^2 = {metrics['r2']:.4f} | Adj R^2 = {metrics['adj_r2']:.4f} | MAE = {metrics['mae']:.4f} | Time = {elapsed:.1f}s{Colors.RESET}"
             )
@@ -859,6 +868,7 @@ def train_all_ml_models():
         results_df = pd.DataFrame(results).sort_values("r2", ascending=False)
 
         for idx, row in results_df.iterrows():
+            # Calculate rank (index starts at 0, rank starts at 1)
             rank = idx + 1
             print(
                 f"  {Colors.BRIGHT_WHITE}{rank}.{Colors.RESET} {row['model']:20s} "
@@ -889,8 +899,7 @@ def train_all_ml_models():
         print(
             f"  {Colors.BRIGHT_GREEN}OK{Colors.RESET} Best ML Model:  {best_ml_model['model']} (R^2 = {best_ml_model['r2']:.4f})"
         )
-    # Panel Model line removed as per user request
-
+    # Panel Model line removed
     print()
     print(f"{Colors.CYAN}Results saved to:{Colors.RESET}")
     print(
@@ -919,7 +928,7 @@ def train_all_ml_models():
             print_error(f"Failed to generate visualization: {str(e)}")
 
     # Mark training as completed in this session and store models in memory
-    global TRAINING_COMPLETED_THIS_SESSION, WORKFLOW_COMPLETION, SESSION_MODELS_DATA, SESSION_TRAIN_DATA, SESSION_TEST_DATA
+    global TRAINING_COMPLETED_THIS_SESSION, WORKFLOW_COMPLETION, SESSION_MODELS_DATA, SESSION_TRAIN_DATA, SESSION_TEST_DATA, SESSION_FULL_DATA
     TRAINING_COMPLETED_THIS_SESSION = True
     WORKFLOW_COMPLETION["train_model"] = True
 
@@ -927,6 +936,16 @@ def train_all_ml_models():
     SESSION_MODELS_DATA = results
     SESSION_TRAIN_DATA = train_data
     SESSION_TEST_DATA = test_data
+
+    # Load or combine full data (1996-2023) for visualizations
+    paths = get_project_paths()
+    processed_dir = paths["data_processed"]
+    full_data_file = processed_dir / "full_data.csv"
+    if full_data_file.exists():
+        SESSION_FULL_DATA = pd.read_csv(full_data_file)
+    else:
+        # Fallback: combine train and test
+        SESSION_FULL_DATA = pd.concat([train_data, test_data])
 
     input(f"\n{Colors.DIM}Press Enter to continue...{Colors.RESET}")
 
@@ -937,10 +956,6 @@ def train_dynamic_panel(skip_input=False):
     Returns:
         dict: Panel metrics (r2, rmse, time) if successful, None otherwise
     """
-    import time
-
-    import pandas as pd
-
     from src.models import PanelAnalyzer
 
     if not skip_input:
@@ -1031,7 +1046,7 @@ def train_dynamic_panel(skip_input=False):
         analyzer.prepare_panel_structure()
 
         # Train/test split
-        # Use 2017 as train end year (standard for this project)
+        # Use 2017 as train end year
         train_end_year = 2017
         print(
             f"  {Colors.DIM}-> Splitting data (train end: {train_end_year})...{Colors.RESET}"
@@ -1055,8 +1070,6 @@ def train_dynamic_panel(skip_input=False):
         elapsed = time.time() - start_time
 
         # Save results (fixed filename, overwrites previous)
-        from datetime import datetime
-
         results_file = results_dir / "panel_analysis.txt"
 
         with open(results_file, "w") as f:
@@ -1125,10 +1138,6 @@ def train_dynamic_panel(skip_input=False):
 
 def train_single_model(model_name, ModelClass):
     """Train a single ML model."""
-    import time
-
-    import pandas as pd
-
     print()
     print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}{'=' * 80}{Colors.RESET}")
     print(
@@ -1337,11 +1346,6 @@ def train_model():
 
 def test_all_models():
     """Display test results from in-memory trained models (no .pkl loading)."""
-    import time
-    from datetime import datetime
-
-    import pandas as pd
-
     global SESSION_MODELS_DATA, SESSION_TEST_DATA
 
     # Start total timer
@@ -1379,7 +1383,7 @@ def test_all_models():
         {
             "model": m["model"],
             "r2": m["r2"],
-            "adj_r2": m.get("adj_r2", m["r2"]),  # Use R² if adj_r2 not available
+            "adj_r2": m.get("adj_r2", m["r2"]),  # Use R^2 if adj_r2 not available
             "f_stat": m.get("f_stat", 0),
             "f_pvalue": m.get("f_pvalue", 1.0),
             "mae": m["mae"],
@@ -1390,14 +1394,14 @@ def test_all_models():
 
     results_df = pd.DataFrame(results).sort_values("r2", ascending=False)
 
-    # Professional table display with Adjusted R² and F-statistic
+    # Professional table display with Adjusted R^2 and F-statistic
     print(f"{Colors.BOLD}{Colors.BRIGHT_WHITE}╔{'═' * 98}╗{Colors.RESET}")
     print(
         f"{Colors.BOLD}{Colors.BRIGHT_WHITE}║{Colors.RESET} {Colors.BOLD}{'MODEL PERFORMANCE RANKING'.center(96)}{Colors.RESET} {Colors.BOLD}{Colors.BRIGHT_WHITE}║{Colors.RESET}"
     )
     print(f"{Colors.BOLD}{Colors.BRIGHT_WHITE}╠{'═' * 98}╣{Colors.RESET}")
     # Build header ensuring exactly 96 characters
-    header_content = f" {'Rank':^9} │ {'Model':^22} │ {'R²':^8} │ {'Adj R²':^8} │ {'F-stat':^12} │ {'MAE':^8} │ {'RMSE':^8}  "
+    header_content = f" {'Rank':^9} │ {'Model':^22} │ {'R^2':^8} │ {'Adj R^2':^8} │ {'F-stat':^12} │ {'MAE':^8} │ {'RMSE':^8}  "
     print(
         f"{Colors.BOLD}{Colors.BRIGHT_WHITE}║{Colors.RESET}{Colors.BOLD}{header_content}{Colors.RESET}{Colors.BOLD}{Colors.BRIGHT_WHITE}║{Colors.RESET}"
     )
@@ -1415,7 +1419,7 @@ def test_all_models():
         else:
             rank_mark = "   "
 
-        # Color coding based on R² score
+        # Color coding based on R^2 score
         if row["r2"] >= 0.75:
             score_color = Colors.BRIGHT_GREEN
         elif row["r2"] >= 0.65:
@@ -1458,9 +1462,9 @@ def test_all_models():
     best_model = results_df.iloc[0]
 
     # Calculate padding for proper alignment
-    champion_line = f"  Champion:         {best_model['model']:<30} R² = {best_model['r2']:.4f} │ Adj R² = {best_model['adj_r2']:.4f}"
-    avg_r2_line = f"  Average R²:       {avg_r2:.4f} ± {std_r2:.4f}"
-    avg_adj_r2_line = f"  Average Adj R²:   {avg_adj_r2:.4f}"
+    champion_line = f"  Champion:         {best_model['model']:<30} R^2 = {best_model['r2']:.4f} │ Adj R^2 = {best_model['adj_r2']:.4f}"
+    avg_r2_line = f"  Average R^2:       {avg_r2:.4f} ± {std_r2:.4f}"
+    avg_adj_r2_line = f"  Average Adj R^2:   {avg_adj_r2:.4f}"
     avg_mae_line = f"  Average MAE:      {avg_mae:.4f}"
     models_tested_line = f"  Models tested:    {len(results_df)}/7"
 
@@ -1500,10 +1504,6 @@ def test_all_models():
 
 def test_dynamic_panel_results():
     """Display the most recent Dynamic Panel test results."""
-    from pathlib import Path
-
-    import pandas as pd
-
     print()
     print(f"{Colors.BOLD}{Colors.BRIGHT_GREEN}{'=' * 80}{Colors.RESET}")
     print(
@@ -1635,8 +1635,6 @@ def test_model():
 
 def evaluate_saved_models():
     """Compare all saved models and show performance metrics."""
-    import pandas as pd
-
     print_section("ACTION 4: EVALUATE SAVED MODELS")
 
     # Check workflow: Must have tested models in this session
@@ -1779,6 +1777,7 @@ def evaluate_saved_models():
         print(f"{Colors.DIM}{'' * 80}{Colors.RESET}")
 
         for idx, row in df_sorted.iterrows():
+            # Calculate rank (index starts at 0, rank starts at 1)
             rank = idx + 1
             print(
                 f"{rank:4d}  {row['model']:18s}  {Colors.BOLD}{row['r2']:.4f}{Colors.RESET}    {row['mae']:.4f}    {row['rmse']:.4f}    {row['time']:.1f}s"
@@ -1842,7 +1841,6 @@ def evaluate_saved_models():
 # Main.py only coordinates and calls these functions with proper paths
 
 from src.evaluation import (
-    generate_cv_scores_comparison,
     generate_error_distribution,
     generate_feature_importance_plot,
     generate_learning_curves,
@@ -1850,6 +1848,7 @@ from src.evaluation import (
     generate_political_stability_evolution,
     generate_predictions_plot,
     generate_regional_analysis,
+    generate_regional_stability_evolution,
     generate_residual_plots,
     generate_statistical_analysis,
     generate_time_series_predictions,
@@ -1865,22 +1864,38 @@ def call_viz_function(func, func_name):
     print()
     print(f"{Colors.CYAN}-> Generating {func_name}...{Colors.RESET}")
 
-    global SESSION_MODELS_DATA, SESSION_TRAIN_DATA, SESSION_TEST_DATA
+    global SESSION_MODELS_DATA, SESSION_TRAIN_DATA, SESSION_TEST_DATA, SESSION_FULL_DATA
 
     paths = get_project_paths()
     figures_dir = paths["figures"]
     figures_dir.mkdir(parents=True, exist_ok=True)
 
+    # Ensure SESSION_FULL_DATA is loaded for evolution visualizations
+    if SESSION_FULL_DATA is None and func.__name__ in [
+        "generate_political_stability_evolution",
+        "generate_regional_stability_evolution",
+    ]:
+        processed_dir = paths["data_processed"]
+        full_data_file = processed_dir / "full_data.csv"
+        if full_data_file.exists():
+            SESSION_FULL_DATA = pd.read_csv(full_data_file)
+        elif SESSION_TRAIN_DATA is not None and SESSION_TEST_DATA is not None:
+            SESSION_FULL_DATA = pd.concat([SESSION_TRAIN_DATA, SESSION_TEST_DATA])
+
     try:
         # Pass in-memory models and data (no .pkl loading!)
         if func.__name__ in [
             "generate_statistical_analysis",
-            "generate_political_stability_evolution",
         ]:
             output_file = func(SESSION_TEST_DATA, figures_dir)
         elif func.__name__ in [
+            "generate_political_stability_evolution",
+            "generate_regional_stability_evolution",
+        ]:
+            # Use FULL DATA (1996-2023) for evolution visualizations
+            output_file = func(SESSION_FULL_DATA, figures_dir)
+        elif func.__name__ in [
             "generate_learning_curves",
-            "generate_cv_scores_comparison",
         ]:
             output_file = func(SESSION_MODELS_DATA, SESSION_TRAIN_DATA, figures_dir)
         elif func.__name__ in [
@@ -1973,20 +1988,20 @@ def run_visualization():
         f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[7]{Colors.RESET}   Time Series Predictions     {Colors.DIM}->{Colors.RESET}  Temporal evolution"
     )
     print(
-        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[8]{Colors.RESET}   Cross-Validation Scores     {Colors.DIM}->{Colors.RESET}  Model robustness"
+        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[8]{Colors.RESET}   Error Distribution          {Colors.DIM}->{Colors.RESET}  Prediction errors analysis"
     )
     print(
-        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[9]{Colors.RESET}   Error Distribution          {Colors.DIM}->{Colors.RESET}  Prediction errors analysis"
+        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[9]{Colors.RESET}   Regional Analysis           {Colors.DIM}->{Colors.RESET}  Geographic performance"
     )
     print(
-        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[10]{Colors.RESET}  Regional Analysis           {Colors.DIM}->{Colors.RESET}  Geographic performance"
+        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[10]{Colors.RESET}  Political Stability Evolution {Colors.DIM}->{Colors.RESET} Average stability over time"
     )
     print(
-        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[11]{Colors.RESET}  Political Stability Evolution {Colors.DIM}->{Colors.RESET} Global average over time"
+        f"  {Colors.BOLD}{Colors.BRIGHT_CYAN}[11]{Colors.RESET}  Regional Stability Evolution {Colors.DIM}->{Colors.RESET} Trends by geographic region"
     )
     print()
     print(
-        f"  {Colors.BOLD}{Colors.BRIGHT_GREEN}[12]{Colors.RESET}  ALL VISUALIZATIONS          {Colors.DIM}->{Colors.RESET}  Generate 10 plots (fast)"
+        f"  {Colors.BOLD}{Colors.BRIGHT_GREEN}[12]{Colors.RESET}  ALL VISUALIZATIONS          {Colors.DIM}->{Colors.RESET}  Generate all plots (fast)"
     )
 
     print(f"\n{Colors.DIM}{'' * 80}{Colors.RESET}")
@@ -2014,11 +2029,13 @@ def run_visualization():
         # Learning Curves removed - too slow (available individually as option 6)
         # call_viz_function(generate_learning_curves, "Learning Curves")
         call_viz_function(generate_time_series_predictions, "Time Series Predictions")
-        call_viz_function(generate_cv_scores_comparison, "Cross-Validation Scores")
         call_viz_function(generate_error_distribution, "Error Distribution")
         call_viz_function(generate_regional_analysis, "Regional Analysis")
         call_viz_function(
             generate_political_stability_evolution, "Political Stability Evolution"
+        )
+        call_viz_function(
+            generate_regional_stability_evolution, "Regional Stability Evolution"
         )
 
         print()
@@ -2026,7 +2043,7 @@ def run_visualization():
             f"{Colors.BOLD}{Colors.BRIGHT_GREEN}OK All 10 visualizations generated successfully!{Colors.RESET}"
         )
         print(
-            f"{Colors.DIM}(Learning Curves skipped - available individually as option 6){Colors.RESET}"
+            f"{Colors.DIM}(Learning Curves and Cross-Validation Scores skipped){Colors.RESET}"
         )
 
         # Mark as completed
@@ -2054,17 +2071,19 @@ def run_visualization():
         call_viz_function(generate_time_series_predictions, "Time Series Predictions")
         WORKFLOW_COMPLETION["visualization"] = True
     elif choice == "8":
-        call_viz_function(generate_cv_scores_comparison, "Cross-Validation Scores")
-        WORKFLOW_COMPLETION["visualization"] = True
-    elif choice == "9":
         call_viz_function(generate_error_distribution, "Error Distribution")
         WORKFLOW_COMPLETION["visualization"] = True
-    elif choice == "10":
+    elif choice == "9":
         call_viz_function(generate_regional_analysis, "Regional Analysis")
+        WORKFLOW_COMPLETION["visualization"] = True
+    elif choice == "10":
+        call_viz_function(
+            generate_political_stability_evolution, "Political Stability Evolution"
+        )
         WORKFLOW_COMPLETION["visualization"] = True
     elif choice == "11":
         call_viz_function(
-            generate_political_stability_evolution, "Political Stability Evolution"
+            generate_regional_stability_evolution, "Regional Stability Evolution"
         )
         WORKFLOW_COMPLETION["visualization"] = True
     else:
@@ -2080,8 +2099,6 @@ def run_visualization():
 
 def show_dashboard_link():
     """Display Streamlit dashboard URL and open in browser."""
-    import webbrowser
-
     print_section("ACTION 6: SHOW DASHBOARD LINK")
 
     dashboard_url = "http://localhost:8501"
@@ -2096,10 +2113,8 @@ def show_dashboard_link():
     # Check if dashboard is already running
     is_running = False
     try:
-        import requests
-
-        response = requests.get(dashboard_url, timeout=1)
-        if response.status_code == 200:
+        response = requests.get(dashboard_url, timeout=1) if requests else None
+        if response and response.status_code == 200:
             is_running = True
             print_success(f"Dashboard is running!")
     except:
@@ -2137,15 +2152,11 @@ def show_dashboard_link():
         print()
         print_info("Launching dashboard...")
         try:
-            import subprocess
-
             # Kill any existing streamlit processes first
             try:
                 subprocess.run(
                     ["pkill", "-f", "streamlit"], capture_output=True, timeout=5
                 )
-                import time
-
                 time.sleep(1)  # Wait for processes to die
             except:
                 pass  # Ignore if pkill fails (Windows or no processes)
@@ -2170,8 +2181,6 @@ def show_dashboard_link():
             print_info("Waiting for dashboard to start...")
 
             # Wait a bit for dashboard to start
-            import time
-
             time.sleep(3)
 
             print_info("Opening in browser...")
@@ -2218,8 +2227,6 @@ def test_coverage():
 
     try:
         # Clean old coverage data
-        import subprocess
-
         coverage_file = project_root / ".coverage"
         if coverage_file.exists():
             coverage_file.unlink()
